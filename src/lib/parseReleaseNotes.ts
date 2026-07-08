@@ -121,7 +121,7 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
     sectionBuf = []
   }
 
-  for (const line of markdown.split(/\r?\n/)) {
+  for (const line of normalizeMarkdownSource(markdown).split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
     if (inFence) {
       if (currentItem) currentItem.body += line + '\n'

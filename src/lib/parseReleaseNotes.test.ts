@@ -234,6 +234,27 @@ describe('parseReleaseNotes', () => {
     expect(sections).toHaveLength(0)
   })
 
+  it('parses wiki content that arrives with escaped newlines and escaped heading markers', () => {
+    const escapedHash = '\\#'
+    const md = [
+      '#Change Log',
+      '#Deployment Notes',
+      '##Main Changes',
+      '',
+      `**${escapedHash}297226**`,
+      '',
+      '##Minor Changes',
+      '',
+      `**${escapedHash}296356**`,
+    ].join('\\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
   it('parses every bundled demo page without losing items', () => {
     for (const [path, md] of demoPages) {
       const { items } = parseReleaseNotes(md)
