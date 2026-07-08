@@ -96,15 +96,25 @@ interface BodyProps {
 function ReleaseBody(props: BodyProps) {
   const { version, parsed, workItems, remoteUrl, typeFilter, setTypeFilter, query, setQuery, copied, setCopied, neighbors } = props
 
-  const q = query.trim().toLowerCase()
-  const visible = useMemo(
-    () => parsed.items.filter((i) => matches(i, i.id ? workItems.get(i.id) : undefined, typeFilter, q)),
-    [parsed.items, workItems, typeFilter, q],
+  // Bare-mention items parse as type 'other'; the live work item knows better.
+  const items = useMemo(
+    () =>
+      parsed.items.map((i) => {
+        const wi = i.id ? workItems.get(i.id) : undefined
+        return i.type === 'other' && wi && wi.type !== 'other' ? { ...i, type: wi.type } : i
+      }),
+    [parsed.items, workItems],
   )
 
-  const featureCount = parsed.items.filter((i) => i.type === 'feature').length
-  const bugCount = parsed.items.filter((i) => i.type === 'bug').length
-  const presentTypes = [...new Set(parsed.items.map((i) => i.type))]
+  const q = query.trim().toLowerCase()
+  const visible = useMemo(
+    () => items.filter((i) => matches(i, i.id ? workItems.get(i.id) : undefined, typeFilter, q)),
+    [items, workItems, typeFilter, q],
+  )
+
+  const featureCount = items.filter((i) => i.type === 'feature' || i.type === 'story').length
+  const bugCount = items.filter((i) => i.type === 'bug').length
+  const presentTypes = [...new Set(items.map((i) => i.type))]
 
   const sections: Array<{ title: string; items: ReleaseItem[] }> = [
     { title: 'Main Changes', items: visible.filter((i) => i.section === 'main') },
@@ -113,9 +123,10 @@ function ReleaseBody(props: BodyProps) {
   ].filter((s) => s.items.length > 0)
 
   const copy = async (kind: 'md' | 'html') => {
-    const md = releaseToMarkdown(version, parsed, workItems)
+    const resolved = { items, sections: parsed.sections }
+    const md = releaseToMarkdown(version, resolved, workItems)
     if (kind === 'md') await navigator.clipboard.writeText(md)
-    else await copyRich(releaseToHtml(version, parsed, workItems), md)
+    else await copyRich(releaseToHtml(version, resolved, workItems), md)
     setCopied(kind)
     setTimeout(() => setCopied(null), 1600)
   }
@@ -184,7 +195,7 @@ function ReleaseBody(props: BodyProps) {
                 {bugCount} {bugCount === 1 ? 'fix' : 'fixes'}
               </span>
             )}
-            {parsed.items.length === 0 && (
+            {items.length === 0 && (
               <span className="rounded-full bg-stone-brand/15 px-3 py-1 text-sm text-slate-brand">
                 No itemised changes on this page
               </span>
@@ -195,7 +206,7 @@ function ReleaseBody(props: BodyProps) {
 
       <div className="mx-auto max-w-4xl px-6 py-8">
         {/* Filters */}
-        {parsed.items.length > 0 && (
+        {items.length > 0 && (
           <div className="no-print mb-8 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
               {(['all', ...presentTypes] as TypeFilter[]).map((t) => (
@@ -209,7 +220,7 @@ function ReleaseBody(props: BodyProps) {
                       : 'bg-white text-slate-brand ring-1 ring-charcoal/10 hover:text-charcoal'
                   }`}
                 >
-                  {t === 'all' ? `All (${parsed.items.length})` : `${typeMeta(t).label}s`}
+                  {t === 'all' ? `All (${items.length})` : `${typeMeta(t).label}s`}
                 </button>
               ))}
             </div>
@@ -227,7 +238,7 @@ function ReleaseBody(props: BodyProps) {
         )}
 
         {/* Items */}
-        {sections.length === 0 && parsed.items.length > 0 && (
+        {sections.length === 0 && items.length > 0 && (
           <EmptyState title="Nothing matches those filters">
             Clear the search or pick a different type to see the rest of this release.
           </EmptyState>

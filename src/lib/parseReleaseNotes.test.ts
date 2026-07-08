@@ -133,6 +133,74 @@ describe('parseReleaseNotes', () => {
     expect(sections[0].markdown).toContain('plain paragraph')
   })
 
+  it('parses the real 7.0.6 format: no-space headings, #id then title on next line', () => {
+    // Verbatim structure from the production wiki page.
+    const md = [
+      '#Deployment Notes',
+      '##Main Changes',
+      '',
+      '#247531',
+      'A/R Cash Posting - Accounts receivable for 1st Mile',
+      '',
+      'Value: Customers with multiple outstanding invoices can now settle them together.',
+      '',
+      'How to use: Open the cash posting screen for the customer.',
+      '',
+      '#268223',
+      'Add Store Selector for Surcharge Estimate Check for 1st Mile - Payment Provider Configuration',
+      '',
+      'Value: Branches can now control whether a surcharge estimate check runs.',
+      '',
+      'Workflow:',
+      '',
+      'Navigate to payment provider configuration for the branch.',
+      'Save the settings and confirm the change applies to that branch only.',
+      '',
+      '#308590',
+      '##Minor Changes',
+      '',
+      '#291670',
+      'HQ Maintained - Can update cost on an OP',
+      '',
+      'Overview:',
+      '',
+      'Fixed an issue where cost could be updated on an order proposal.',
+      '',
+      '#300163',
+      'Invoices api returning payment against original work order after credit reissue',
+      '',
+      'Overview:',
+      '',
+      'Fixed an issue where credited invoices showed payment information from the original work order.',
+    ].join('\n')
+
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => i.id)).toEqual([247531, 268223, 308590, 291670, 300163])
+
+    expect(items[0]).toMatchObject({
+      id: 247531,
+      title: 'A/R Cash Posting - Accounts receivable for 1st Mile',
+      section: 'main',
+    })
+    expect(items[0].body).toContain('Value: Customers with multiple outstanding invoices')
+    expect(items[0].body).toContain('How to use:')
+
+    expect(items[1].body).toContain('Workflow:')
+
+    // "#308590" with no title/body at all — placeholder, enrichment fills it in.
+    expect(items[2]).toMatchObject({ id: 308590, title: 'Work item 308590', section: 'main' })
+
+    expect(items[3]).toMatchObject({
+      id: 291670,
+      title: 'HQ Maintained - Can update cost on an OP',
+      section: 'minor',
+    })
+    expect(items[3].body).toContain('Fixed an issue where cost could be updated')
+
+    // No leftover soup: everything belongs to an item or a known heading.
+    expect(sections).toHaveLength(0)
+  })
+
   it('parses every bundled demo page without losing items', () => {
     for (const [path, md] of demoPages) {
       const { items } = parseReleaseNotes(md)

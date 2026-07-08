@@ -56,9 +56,13 @@ export function Compare() {
   )
 
   const totals = useMemo(() => {
-    const items = state.data?.changes.flatMap((c) => c.items) ?? []
+    const workItems = state.data?.workItems
+    const items = (state.data?.changes.flatMap((c) => c.items) ?? []).map((i) => {
+      const wi = i.id ? workItems?.get(i.id) : undefined
+      return i.type === 'other' && wi && wi.type !== 'other' ? { ...i, type: wi.type } : i
+    })
     return {
-      features: items.filter((i) => i.type === 'feature').length,
+      features: items.filter((i) => i.type === 'feature' || i.type === 'story').length,
       bugs: items.filter((i) => i.type === 'bug').length,
       all: items.length,
     }
