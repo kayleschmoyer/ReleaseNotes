@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.mjs",
+    "start": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
@@ -15,6 +17,7 @@
     "@azure/msal-react": "^2.2.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/roboto-mono": "^5.2.9",
+    "express": "^5.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.3",

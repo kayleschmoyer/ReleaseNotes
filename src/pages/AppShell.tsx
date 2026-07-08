@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { useData } from '../api/DataProvider'
 import { useAsync } from '../lib/useAsync'
 import { compareVersionsDesc } from '../lib/versionSort'
-import { isDemoMode } from '../lib/config'
+import { useMode } from '../lib/mode'
 import { Logo } from '../components/Logo'
 import { GlobalSearch } from '../components/GlobalSearch'
 import { VersionSidebar } from '../components/VersionSidebar'
@@ -20,6 +20,7 @@ export interface ShellContext {
 
 export function AppShell() {
   const { user, signOut } = useAuth()
+  const mode = useMode()
   const data = useData()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -79,7 +80,7 @@ export function AppShell() {
                   <div className="border-b border-charcoal/8 px-3 py-2.5">
                     <p className="text-sm font-semibold text-charcoal">{user.name}</p>
                     <p className="truncate text-xs text-slate-brand">{user.email}</p>
-                    {isDemoMode && (
+                    {mode === 'demo' && (
                       <p className="mt-1 font-mono text-[10px] text-magenta-deep">demo mode · sample data</p>
                     )}
                   </div>
