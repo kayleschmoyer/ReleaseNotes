@@ -201,6 +201,29 @@ describe('parseReleaseNotes', () => {
     expect(sections).toHaveLength(0)
   })
 
+  it('parses bold-wrapped mentions (real 7.0.7 format)', () => {
+    const md = [
+      '#Change Log',
+      '#Deployment Notes',
+      '##Main Changes',
+      '',
+      '**#297226**',
+      '',
+      '##Minor Changes',
+      '',
+      '**#296356**',
+      '**#303980**',
+      '**#311235**',
+      '**#312923**',
+    ].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => i.id)).toEqual([297226, 296356, 303980, 311235, 312923])
+    // Title-less mentions get placeholders; the UI swaps in the live work-item title.
+    expect(items[0]).toMatchObject({ id: 297226, title: 'Work item 297226', section: 'main' })
+    expect(items[1].section).toBe('minor')
+    expect(sections).toHaveLength(0)
+  })
+
   it('parses every bundled demo page without losing items', () => {
     for (const [path, md] of demoPages) {
       const { items } = parseReleaseNotes(md)

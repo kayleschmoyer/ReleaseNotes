@@ -47,6 +47,14 @@ function unwrapLinks(s: string): string {
   return s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
 }
 
+/**
+ * Strip inline formatting so structural matching sees the plain text:
+ * "**#297226**" -> "#297226", "[**##Heading**](url)" -> "##Heading".
+ */
+function stripInline(s: string): string {
+  return unwrapLinks(s).replace(/[*_`~]/g, '').trim()
+}
+
 /** Strip markdown emphasis/backticks and collapse whitespace. */
 function cleanTitle(s: string): string {
   return unwrapLinks(s)
@@ -115,8 +123,12 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
       continue
     }
 
+    // Match structure against the line with inline formatting stripped, so
+    // "**#297226**" and "**##Heading**" are recognised too.
+    const plain = stripInline(line)
+
     // Work-item mentions first, so "#247531" is never mistaken for a heading.
-    const mention = line.match(BARE_MENTION)
+    const mention = plain.match(BARE_MENTION)
     if (mention) {
       flushItem()
       const [, id, rest] = mention
@@ -131,7 +143,7 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
       continue
     }
 
-    const heading = line.match(HEADING)
+    const heading = plain.match(HEADING)
     if (heading) {
       flushItem()
       // Item heading ("### Feature 123: …", possibly link-wrapped)?
