@@ -3,15 +3,14 @@ import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom'
 import { useData } from '../api/DataProvider'
 import { useAsync } from '../lib/useAsync'
 import { parseReleaseNotes } from '../lib/parseReleaseNotes'
-import { releaseToHtml, releaseToMarkdown, copyRich } from '../lib/exportRelease'
 import { typeMeta } from '../lib/status'
 import type { ItemType, ParsedRelease, ReleaseItem, WorkItemInfo } from '../lib/types'
-import { config } from '../lib/config'
 import { ItemCard } from '../components/ItemCard'
+import { Logo } from '../components/Logo'
 import { Markdown } from '../components/Markdown'
 import { ReleaseSkeleton } from '../components/Skeletons'
 import { EmptyState, ErrorState } from '../components/States'
-import { CheckIcon, CopyIcon, ExternalIcon, PrintIcon, SearchIcon } from '../components/icons'
+import { PrintIcon, SearchIcon } from '../components/icons'
 import type { ShellContext } from './AppShell'
 
 type TypeFilter = 'all' | ItemType
@@ -30,7 +29,6 @@ export function Release() {
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [query, setQuery] = useState('')
-  const [copied, setCopied] = useState<'md' | 'html' | null>(null)
 
   const page = versions.find((v) => v.name === version)
 
@@ -64,13 +62,10 @@ export function Release() {
       version={version}
       parsed={parsed}
       workItems={workItems}
-      remoteUrl={page.remoteUrl}
       typeFilter={typeFilter}
       setTypeFilter={setTypeFilter}
       query={query}
       setQuery={setQuery}
-      copied={copied}
-      setCopied={setCopied}
       neighbors={{
         newer: versions[versions.findIndex((v) => v.name === version) - 1]?.name,
         older: versions[versions.findIndex((v) => v.name === version) + 1]?.name,
@@ -83,20 +78,26 @@ interface BodyProps {
   version: string
   parsed: ParsedRelease
   workItems: Map<number, WorkItemInfo>
-  remoteUrl?: string
   typeFilter: TypeFilter
   setTypeFilter: (t: TypeFilter) => void
   query: string
   setQuery: (q: string) => void
-  copied: 'md' | 'html' | null
-  setCopied: (c: 'md' | 'html' | null) => void
   neighbors: { newer?: string; older?: string }
 }
 
 const WRAPPER_SECTION_TITLES = new Set(['change log', 'deployment notes'])
 
 function ReleaseBody(props: BodyProps) {
-  const { version, parsed, workItems, remoteUrl, typeFilter, setTypeFilter, query, setQuery, copied, setCopied, neighbors } = props
+  const { version, parsed, workItems, typeFilter, setTypeFilter, query, setQuery, neighbors } = props
+  const generatedOn = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-NZ', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(new Date()),
+    [],
+  )
 
   // Bare-mention items parse as type 'other'; the live work item knows better.
   const items = useMemo(
@@ -124,23 +125,25 @@ function ReleaseBody(props: BodyProps) {
     { title: 'Other Changes', items: visible.filter((i) => i.section === 'other') },
   ].filter((s) => s.items.length > 0)
 
-  const copy = async (kind: 'md' | 'html') => {
-    const resolved = { items, sections: parsed.sections }
-    const md = releaseToMarkdown(version, resolved, workItems)
-    if (kind === 'md') await navigator.clipboard.writeText(md)
-    else await copyRich(releaseToHtml(version, resolved, workItems), md)
-    setCopied(kind)
-    setTimeout(() => setCopied(null), 1600)
-  }
-
-  const wikiUrl =
-    remoteUrl ??
-    `https://dev.azure.com/${config.org}/${encodeURIComponent(config.project)}/_wiki/wikis/${encodeURIComponent(config.wiki)}?pagePath=${encodeURIComponent(`${config.rootPath}/${version}`)}`
-
   return (
-    <div className="rise-in" data-testid="release-page">
+    <div className="rise-in pdf-release" data-testid="release-page">
+      <div className="print-block pdf-print-header hidden">
+        <div className="pdf-print-headline">
+          <Logo size="lg" />
+          <div className="pdf-print-meta">
+            <p className="pdf-print-kicker">Customer Release Notes</p>
+            <p className="pdf-print-version">Version {version}</p>
+            <p className="pdf-print-date">Generated {generatedOn}</p>
+          </div>
+        </div>
+        <div className="pdf-print-chips">
+          {featureCount > 0 && <span className="pdf-chip pdf-chip-feature">{featureCount} new {featureCount === 1 ? 'feature' : 'features'}</span>}
+          {bugCount > 0 && <span className="pdf-chip pdf-chip-bug">{bugCount} {bugCount === 1 ? 'fix' : 'fixes'}</span>}
+        </div>
+      </div>
+
       {/* Hero */}
-      <div className="living-magenta-soft border-b border-charcoal/6">
+      <div className="no-print living-magenta-soft border-b border-charcoal/6">
         <div className="brand-grid mx-auto max-w-4xl px-6 pt-10 pb-8">
           <p className="font-mono text-xs tracking-widest text-slate-brand uppercase">
             Vast Online Core · Release
@@ -151,22 +154,6 @@ function ReleaseBody(props: BodyProps) {
             </h1>
             <div className="no-print flex items-center gap-2">
               <button
-                onClick={() => copy('md')}
-                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
-                title="Copy as Markdown"
-              >
-                {copied === 'md' ? <CheckIcon className="h-4 w-4 text-forest" /> : <CopyIcon className="h-4 w-4" />}
-                {copied === 'md' ? 'Copied' : 'Markdown'}
-              </button>
-              <button
-                onClick={() => copy('html')}
-                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
-                title="Copy email-ready HTML"
-              >
-                {copied === 'html' ? <CheckIcon className="h-4 w-4 text-forest" /> : <CopyIcon className="h-4 w-4" />}
-                {copied === 'html' ? 'Copied' : 'Email'}
-              </button>
-              <button
                 onClick={() => window.print()}
                 className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
                 title="Print or save as PDF"
@@ -174,16 +161,6 @@ function ReleaseBody(props: BodyProps) {
                 <PrintIcon className="h-4 w-4" />
                 PDF
               </button>
-              <a
-                href={wikiUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
-                title="Open the source page in Azure DevOps"
-              >
-                <ExternalIcon className="h-4 w-4" />
-                Wiki
-              </a>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -206,7 +183,7 @@ function ReleaseBody(props: BodyProps) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="mx-auto max-w-4xl px-6 py-8 pdf-content-wrap">
         {/* Filters */}
         {items.length > 0 && (
           <div className="no-print mb-8 flex flex-wrap items-center gap-3">
@@ -245,7 +222,7 @@ function ReleaseBody(props: BodyProps) {
             Clear the search or pick a different type to see the rest of this release.
           </EmptyState>
         )}
-        <div className="space-y-10">
+        <div className="space-y-10 pdf-item-sections">
           {sections.map((s) => (
             <section key={s.title}>
               <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-charcoal/8 pb-3">
@@ -267,7 +244,7 @@ function ReleaseBody(props: BodyProps) {
         {parsed.sections.length > 0 && (
           <div className="mt-12 space-y-8">
             {parsed.sections.map((s, i) => (
-              <section key={i} className="rounded-2xl border border-charcoal/8 bg-white p-6 shadow-card">
+              <section key={i} className="rounded-2xl border border-charcoal/8 bg-white p-6 shadow-card pdf-section-card">
                 {s.title && !WRAPPER_SECTION_TITLES.has(s.title.trim().toLowerCase()) && (
                   <h2 className="mb-3 text-lg font-bold text-charcoal">{s.title}</h2>
                 )}

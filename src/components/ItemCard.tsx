@@ -67,12 +67,12 @@ export function ItemCard({ item, workItem }: ItemCardProps) {
         </div>
         {hasBody && (
           <ChevronIcon
-            className={`mt-1 h-4 w-4 shrink-0 text-stone-brand transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`item-card-chevron mt-1 h-4 w-4 shrink-0 text-stone-brand transition-transform ${open ? 'rotate-90' : ''}`}
           />
         )}
       </div>
-      {hasBody && open && (
-        <div className="border-t border-charcoal/6 px-4 pt-3 pb-4 sm:px-5">
+      {hasBody && (
+        <div className={`item-card-body border-t border-charcoal/6 px-4 pt-3 pb-4 sm:px-5 ${open ? '' : 'item-card-body-collapsed'}`}>
           <Markdown className="prose-brand text-slate-brand">{item.body}</Markdown>
         </div>
       )}
