@@ -113,6 +113,16 @@ describe('parseReleaseNotes', () => {
     expect(sections).toHaveLength(0)
   })
 
+  it('recognises headings and bare mentions with invisible wiki characters', () => {
+    const md = ['#﻿Deployment Notes', '##​Main Changes', '#297226', '##‌Minor Changes', '#296356'].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
   it('dedupes items listed both in a TOC bullet and as a heading', () => {
     const md = [
       '- [Bug 291670: HQ Maintained](url)',
