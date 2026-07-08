@@ -70,6 +70,69 @@ describe('parseReleaseNotes', () => {
     expect(items[0].body).toContain('### Bug 999999: not real')
   })
 
+  it('parses link-wrapped item headings (real wiki format)', () => {
+    const md = [
+      '## Main Changes',
+      '### [Product Backlog Item 247531: A/R Cash Posting - Account Change](https://dev.azure.com/x/_workitems/edit/247531)',
+      'Details here.',
+      '## Minor Changes',
+      '#### [Bug 291670: HQ Maintained - Can update cost on an OP](https://dev.azure.com/x/_workitems/edit/291670)',
+    ].join('\n')
+    const { items } = parseReleaseNotes(md)
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      type: 'story',
+      id: 247531,
+      title: 'A/R Cash Posting - Account Change',
+      section: 'main',
+    })
+    expect(items[0].body).toContain('Details here.')
+    expect(items[1]).toMatchObject({ type: 'bug', id: 291670, section: 'minor' })
+  })
+
+  it('parses items written as bullet links', () => {
+    const md = [
+      '## Main Changes',
+      '- [Product Backlog Item 303826: Text To Authorize - Enable Config](url)',
+      '* [Feature 302442: Vast Commerce - AutoZone](url)',
+      '## Minor Changes',
+      '- [Bug 300163: Invoices api returning payment against original](url)',
+    ].join('\n')
+    const { items } = parseReleaseNotes(md)
+    expect(items.map((i) => i.id)).toEqual([303826, 302442, 300163])
+    expect(items[0].section).toBe('main')
+    expect(items[2]).toMatchObject({ type: 'bug', section: 'minor' })
+  })
+
+  it('treats bare #id lines as mentions, never as headings', () => {
+    const md = ['## Main Changes', '#297226', '## Minor Changes', '#296356', '- #303980'].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => i.id)).toEqual([297226, 296356, 303980])
+    expect(items[0].section).toBe('main')
+    expect(items[1].section).toBe('minor')
+    expect(sections).toHaveLength(0)
+  })
+
+  it('dedupes items listed both in a TOC bullet and as a heading', () => {
+    const md = [
+      '- [Bug 291670: HQ Maintained](url)',
+      '## Minor Changes',
+      '### Bug 291670: HQ Maintained - Can update cost',
+      'Body text.',
+    ].join('\n')
+    const { items } = parseReleaseNotes(md)
+    expect(items).toHaveLength(1)
+    expect(items[0].body).toContain('Body text.')
+  })
+
+  it('never renders a page blank: falls back to raw markdown', () => {
+    const md = 'Just a plain paragraph with no headings or items.'
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items).toHaveLength(0)
+    expect(sections).toHaveLength(1)
+    expect(sections[0].markdown).toContain('plain paragraph')
+  })
+
   it('parses every bundled demo page without losing items', () => {
     for (const [path, md] of demoPages) {
       const { items } = parseReleaseNotes(md)

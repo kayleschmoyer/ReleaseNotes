@@ -37,7 +37,7 @@ export function typeMeta(type: ItemType): { label: string; accent: string; chip:
     case 'bug':
       return { label: 'Bug', accent: 'text-scarlet', chip: 'bg-scarlet/10 text-scarlet' }
     case 'story':
-      return { label: 'User Story', accent: 'text-ocean', chip: 'bg-ocean/10 text-ocean' }
+      return { label: 'Backlog Item', accent: 'text-ocean', chip: 'bg-ocean/10 text-ocean' }
     case 'task':
       return { label: 'Task', accent: 'text-mist', chip: 'bg-mist/20 text-slate-brand' }
     default:

@@ -73,6 +73,12 @@ function ServerAuthProvider({ children }: { children: ReactNode }) {
       .then((r) => r.json())
       .then((data: ServerMe) => setMe(data))
       .catch(() => setMe({ authRequired: true, authenticated: false }))
+
+    // API rejected our session (server restart, expiry) — back to sign-in.
+    const onUnauthorized = () =>
+      setMe((m) => (m ? { ...m, authenticated: false } : { authRequired: true, authenticated: false }))
+    window.addEventListener('app:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('app:unauthorized', onUnauthorized)
   }, [])
 
   const value = useMemo<AuthContextValue>(
