@@ -28,6 +28,11 @@ const HEADING = /^(#{1,6})\s*(\S.*?)\s*$/
 // Bare work-item mention starting a line: "#297226", "- #297226",
 // "#297226: optional same-line title"
 const BARE_MENTION = /^\s*(?:[-*+]\s+)?#(\d{3,})\s*[:\-–—]?\s*(.*)$/
+const BARE_MENTION_TEXT = /^#(\d{3,})\s*[:\-–—]?\s*(.*)$/
+
+// Some pages use plain numeric mentions without '#', e.g.
+// "297226 Vast Commerce - AutoZone Deals" or "- 297226".
+const PLAIN_MENTION = /^\s*(?:[-*+]\s+)?(\d{3,})\s*(.*)$/
 
 // List bullet, e.g. "- [Bug 300163: Invoices api…](url)" or "* Feature 1: x"
 const BULLET = /^\s*[-*+]\s+(.+)$/
@@ -44,7 +49,9 @@ function sectionKind(title: string): SectionKind {
 
 /** Replace markdown links with their text: "[Bug 1: x](url)" -> "Bug 1: x". */
 function unwrapLinks(s: string): string {
-  return s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  return s
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1')
 }
 
 /**
@@ -55,6 +62,58 @@ function normalizeStructuralText(s: string): string {
   return s
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\u00A0/g, ' ')
+}
+
+/**
+ * Normalize raw wiki payloads before line-based parsing.
+ * Some sources arrive as escaped text ("\\n", "\\#") instead of real markdown.
+ */
+function normalizeMarkdownSource(markdown: string): string {
+  let out = normalizeStructuralText(markdown)
+
+  // HTML-encoded hash markers are common when wiki content is serialized.
+  out = out.replace(/&#35;|&#x23;/gi, '#')
+
+  // Some wiki payloads are escaped multiple times before reaching the client.
+  for (let i = 0; i < 3; i += 1) {
+    const next = out
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\([#*_`~\[\]()])/g, '$1')
+    if (next === out) break
+    out = next
+  }
+
+  return out
+}
+
+function parsePlainSectionLabel(raw: string): { title: string; kind: SectionKind } | null {
+  const text = cleanTitle(raw)
+    .toLowerCase()
+    .replace(/\s*[:\-–—]\s*$/, '')
+    .trim()
+  if (!text) return null
+
+  if (MAIN_SECTIONS.some((s) => text === s || text.startsWith(s))) {
+    return { title: 'Main Changes', kind: 'main' }
+  }
+  if (MINOR_SECTIONS.some((s) => text === s || text.startsWith(s))) {
+    return { title: 'Minor Changes', kind: 'minor' }
+  }
+  return null
+}
+
+/**
+ * Azure DevOps treats "##Main Changes" as a heading, but CommonMark does not.
+ * Add a space after heading markers so markdown renderers match DevOps output.
+ */
+function normalizeSectionMarkdownForRender(markdown: string): string {
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^(#{1,6})([A-Za-z])(.*)$/, '$1 $2$3'))
+    .join('\n')
 }
 
 function stripInline(s: string): string {
@@ -79,6 +138,21 @@ function matchItemText(raw: string): { type: ItemType; id: number; title: string
     id: Number(id),
     title: rest.trim(),
   }
+}
+
+function matchPlainMention(raw: string): { id: number; title: string } | null {
+  const m = stripInline(raw).match(PLAIN_MENTION)
+  if (!m) return null
+  const [, idText, rest] = m
+  const id = Number(idText)
+  if (!Number.isFinite(id)) return null
+
+  const title = cleanTitle(rest)
+  // If no explicit separator/title exists, keep it as an id-only mention.
+  if (!title) return { id, title: '' }
+  // Guard against accidental matches like semantic versions (e.g. "7.0.7").
+  if (/^\d+(?:\.\d+)+$/.test(title)) return null
+  return { id, title }
 }
 
 /**
@@ -116,7 +190,7 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
     awaitingTitle = false
   }
   const flushSection = () => {
-    const md = sectionBuf.join('\n').replace(/\[\[_TOC_\]\]/g, '').trim()
+    const md = normalizeSectionMarkdownForRender(sectionBuf.join('\n').replace(/\[\[_TOC_\]\]/g, '').trim())
     if (md) sections.push({ title: currentSectionTitle, markdown: md })
     sectionBuf = []
   }
@@ -149,6 +223,35 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
       continue
     }
 
+    // Some pages use plain labels instead of markdown headings:
+    // "Main Changes:" / "Minor Changes:".
+    const plainSection = parsePlainSectionLabel(plain)
+    if (plainSection) {
+      flushItem()
+      flushSection()
+      currentSectionTitle = plainSection.title
+      currentSection = plainSection.kind
+      continue
+    }
+
+    // DevOps pages sometimes contain work-item lines without a leading '#'.
+    // Only treat these as items once we're inside a known change section.
+    if (currentSection !== 'other') {
+      const plainMention = matchPlainMention(plain)
+      if (plainMention) {
+        flushItem()
+        currentItem = {
+          type: 'other',
+          id: plainMention.id,
+          title: plainMention.title,
+          section: currentSection,
+          body: '',
+        }
+        awaitingTitle = currentItem.title === ''
+        continue
+      }
+    }
+
     const heading = plain.match(HEADING)
     if (heading) {
       flushItem()
@@ -159,6 +262,36 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
         currentItem = { ...item, section: currentSection, body: '' }
         awaitingTitle = currentItem.title === ''
         continue
+      }
+
+      // DevOps can emit bare mentions as headings, e.g. "### #297226".
+      const bareInHeading = stripInline(heading[2]).match(BARE_MENTION_TEXT)
+      if (bareInHeading) {
+        const [, id, rest] = bareInHeading
+        currentItem = {
+          type: 'other',
+          id: Number(id),
+          title: cleanTitle(rest),
+          section: currentSection,
+          body: '',
+        }
+        awaitingTitle = currentItem.title === ''
+        continue
+      }
+
+      if (currentSection !== 'other') {
+        const plainMention = matchPlainMention(heading[2])
+        if (plainMention) {
+          currentItem = {
+            type: 'other',
+            id: plainMention.id,
+            title: plainMention.title,
+            section: currentSection,
+            body: '',
+          }
+          awaitingTitle = currentItem.title === ''
+          continue
+        }
       }
       // Otherwise a section heading.
       flushSection()
@@ -179,6 +312,18 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
           section: currentSection,
           body: '',
         })
+        continue
+      }
+    }
+
+    // Some wiki pages list items as plain lines (often anchor-wrapped HTML)
+    // without markdown heading/bullet markers.
+    if (currentSection !== 'other') {
+      const item = matchItemText(line)
+      if (item) {
+        flushItem()
+        currentItem = { ...item, section: currentSection, body: '' }
+        awaitingTitle = currentItem.title === ''
         continue
       }
     }
@@ -222,7 +367,7 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
 
   // Safety net: never let a page render blank.
   if (deduped.length === 0 && sections.length === 0 && markdown.trim()) {
-    sections.push({ title: '', markdown: markdown.replace(/\[\[_TOC_\]\]/g, '').trim() })
+    sections.push({ title: '', markdown: normalizeSectionMarkdownForRender(markdown.replace(/\[\[_TOC_\]\]/g, '').trim()) })
   }
 
   return { items: deduped, sections }

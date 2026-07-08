@@ -255,6 +255,93 @@ describe('parseReleaseNotes', () => {
     expect(sections).toHaveLength(0)
   })
 
+  it('parses wiki content that is double-escaped by upstream serialization', () => {
+    const escapedHash = '\\\\#'
+    const md = ['#Change Log', '#Deployment Notes', '##Main Changes', `**${escapedHash}297226**`, '##Minor Changes', `**${escapedHash}296356**`].join(
+      '\\\\n',
+    )
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
+  it('parses numeric-only work item lines without leading hash', () => {
+    const md = [
+      '##Main Changes',
+      '297226 Vast Commerce - AutoZone Deals',
+      '##Minor Changes',
+      '296356 Merge Quote Shows Quotes Converted to Work Orders',
+      '303980 Disabled products still showing in Inventory Adjustment screen',
+    ].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => i.id)).toEqual([297226, 296356, 303980])
+    expect(items[0].title).toContain('AutoZone Deals')
+    expect(items[1].section).toBe('minor')
+    expect(sections).toHaveLength(0)
+  })
+
+  it('parses anchor-wrapped item lines from wiki html', () => {
+    const md = [
+      '##Main Changes',
+      '<a href="#%2237f1bf223ca942c58595316845671dbc%22">Feature 297226: Vast Commerce - AutoZone Deals</a>',
+      '##Minor Changes',
+      '<a href="#x">Bug 296356: Merge Quote Shows Quotes Converted to Work Orders</a>',
+    ].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, type: i.type, section: i.section }))).toEqual([
+      { id: 297226, type: 'feature', section: 'main' },
+      { id: 296356, type: 'bug', section: 'minor' },
+    ])
+    expect(items[0].title).toContain('AutoZone Deals')
+    expect(sections).toHaveLength(0)
+  })
+
+  it('parses plain section labels and id/title lines split across lines', () => {
+    const md = [
+      'Main Changes:',
+      '297226',
+      'Vast Commerce - AutoZone Deals',
+      '',
+      'Minor Changes:',
+      '296356',
+      'Merge Quote Shows Quotes Converted to Work Orders',
+      '',
+      '303980',
+      'Disabled products still showing in Inventory Adjustment screen',
+      '',
+      '311235',
+      'Jobnumber/Linenumber column in Plines is different than the same information on the post call',
+    ].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, title: i.title, section: i.section }))).toEqual([
+      { id: 297226, title: 'Vast Commerce - AutoZone Deals', section: 'main' },
+      { id: 296356, title: 'Merge Quote Shows Quotes Converted to Work Orders', section: 'minor' },
+      { id: 303980, title: 'Disabled products still showing in Inventory Adjustment screen', section: 'minor' },
+      {
+        id: 311235,
+        title: 'Jobnumber/Linenumber column in Plines is different than the same information on the post call',
+        section: 'minor',
+      },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
+  it('parses heading-level bare mentions like ### #297226', () => {
+    const md = ['##Main Changes', '### #297226', '##Minor Changes', '### #296356', '### #303980', '### #311235', '### #312923'].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+      { id: 303980, section: 'minor' },
+      { id: 311235, section: 'minor' },
+      { id: 312923, section: 'minor' },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
   it('parses every bundled demo page without losing items', () => {
     for (const [path, md] of demoPages) {
       const { items } = parseReleaseNotes(md)
