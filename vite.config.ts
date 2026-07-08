@@ -10,18 +10,10 @@ export default defineConfig({
     proxy: { '/api': 'http://localhost:3001' },
   },
   build: {
-    rollupOptions: {
-      output: {
-        // React gets its own chunk so the msal/markdown chunks depend on it
-        // instead of on the app chunk — a cycle there leaves libraries with a
-        // null React reference at runtime (white-screen crash).
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          msal: ['@azure/msal-browser', '@azure/msal-react'],
-          markdown: ['react-markdown', 'remark-gfm'],
-        },
-      },
-    },
+    // No manualChunks: hand-splitting created chunk-load cycles that left
+    // libraries with a null React at runtime (white-screen crash). MSAL is
+    // split naturally via dynamic import; one main bundle is fine otherwise.
+    chunkSizeWarningLimit: 900,
   },
   test: {
     environment: 'node',

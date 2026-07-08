@@ -1,41 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { InteractionRequiredAuthError } from '@azure/msal-browser'
-import { useIsAuthenticated, useMsal } from '@azure/msal-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMode } from '../lib/mode'
-import { ADO_SCOPES } from './msal'
+import { AuthContext, type AuthContextValue, type SignInOptions } from './context'
 
-export interface AuthUser {
-  name: string
-  email: string
-}
-
-export interface SignInOptions {
-  /** Access code, used in server mode. */
-  accessCode?: string
-  /** Display name to remember, used in server mode. */
-  name?: string
-}
-
-export interface AuthContextValue {
-  /** null = not signed in */
-  user: AuthUser | null
-  /** Whether the sign-in form needs an access code (server mode only). */
-  needsAccessCode: boolean
-  /** Throws with a friendly message when sign-in fails. */
-  signIn: (opts?: SignInOptions) => void | Promise<void>
-  signOut: () => void
-  /** Access token for the Azure DevOps REST API (entra mode). */
-  getToken: () => Promise<string>
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>')
-  return ctx
-}
+export { useAuth } from './context'
+export type { AuthContextValue, AuthUser, SignInOptions } from './context'
 
 function DemoAuthProvider({ children }: { children: ReactNode }) {
   // Demo sign-in still walks through the sign-in page so the full flow is visible.
@@ -118,45 +87,13 @@ function ServerAuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-function MsalAuthProvider({ children }: { children: ReactNode }) {
-  const { instance, accounts } = useMsal()
-  const isAuthenticated = useIsAuthenticated()
-
-  const value = useMemo<AuthContextValue>(() => {
-    const account = accounts[0] ?? null
-    return {
-      user:
-        isAuthenticated && account
-          ? { name: account.name ?? account.username, email: account.username }
-          : null,
-      needsAccessCode: false,
-      signIn: () => {
-        void instance.loginRedirect({ scopes: ADO_SCOPES })
-      },
-      signOut: () => {
-        void instance.logoutRedirect()
-      },
-      getToken: async () => {
-        if (!account) throw new Error('Not signed in')
-        try {
-          const result = await instance.acquireTokenSilent({ scopes: ADO_SCOPES, account })
-          return result.accessToken
-        } catch (err) {
-          if (err instanceof InteractionRequiredAuthError) {
-            await instance.acquireTokenRedirect({ scopes: ADO_SCOPES, account })
-          }
-          throw err
-        }
-      },
-    }
-  }, [instance, accounts, isAuthenticated])
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
+/**
+ * Demo/server auth only. Entra mode is handled entirely by the lazily-loaded
+ * EntraAuthProvider (see main.tsx) so that no MSAL code is ever loaded — let
+ * alone executed — unless Microsoft sign-in is actually configured.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const mode = useMode()
-  if (mode === 'entra') return <MsalAuthProvider>{children}</MsalAuthProvider>
   if (mode === 'server') return <ServerAuthProvider>{children}</ServerAuthProvider>
   return <DemoAuthProvider>{children}</DemoAuthProvider>
 }
