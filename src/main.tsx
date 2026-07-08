@@ -1,8 +1,8 @@
-import { StrictMode } from 'react'
+import { StrictMode, type ComponentType, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { MsalProvider } from '@azure/msal-react'
 import App from './App'
-import { createMsalInstance } from './auth/msal'
+import { AuthProvider } from './auth/AuthProvider'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { detectMode, detectServerOrDemo, ModeContext, type AppMode } from './lib/mode'
 // Self-hosted brand fonts (Inter + mono call-outs) — no external requests.
 import '@fontsource-variable/inter/index.css'
@@ -12,10 +12,16 @@ import './styles/index.css'
 
 const root = createRoot(document.getElementById('root')!)
 
-function render(mode: AppMode, app: React.ReactNode) {
+function render(mode: AppMode, Provider: ComponentType<{ children: ReactNode }>) {
   root.render(
     <StrictMode>
-      <ModeContext.Provider value={mode}>{app}</ModeContext.Provider>
+      <ErrorBoundary>
+        <ModeContext.Provider value={mode}>
+          <Provider>
+            <App />
+          </Provider>
+        </ModeContext.Provider>
+      </ErrorBoundary>
     </StrictMode>,
   )
 }
@@ -23,26 +29,17 @@ function render(mode: AppMode, app: React.ReactNode) {
 async function boot() {
   const mode = await detectMode()
   if (mode !== 'entra') {
-    render(mode, <App />)
+    render(mode, AuthProvider)
     return
   }
   try {
-    const msal = createMsalInstance()
-    await msal.initialize()
-    // Complete a redirect sign-in if we're returning from one.
-    const result = await msal.handleRedirectPromise().catch(() => null)
-    const account = result?.account ?? msal.getAllAccounts()[0]
-    if (account) msal.setActiveAccount(account)
-    render(
-      mode,
-      <MsalProvider instance={msal}>
-        <App />
-      </MsalProvider>,
-    )
+    // MSAL is only ever loaded here, when Microsoft sign-in is configured.
+    const { createEntraProvider } = await import('./auth/EntraAuthProvider')
+    render('entra', await createEntraProvider())
   } catch (err) {
-    // A broken Entra config must never blank the app — fall back.
+    // A broken Entra setup must never blank the app — fall back.
     console.error('Microsoft sign-in setup failed; falling back:', err)
-    render(await detectServerOrDemo(), <App />)
+    render(await detectServerOrDemo(), AuthProvider)
   }
 }
 
