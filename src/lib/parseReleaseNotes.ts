@@ -51,13 +51,19 @@ function unwrapLinks(s: string): string {
  * Strip inline formatting so structural matching sees the plain text:
  * "**#297226**" -> "#297226", "[**##Heading**](url)" -> "##Heading".
  */
+function normalizeStructuralText(s: string): string {
+  return s
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\u00A0/g, ' ')
+}
+
 function stripInline(s: string): string {
-  return unwrapLinks(s).replace(/[*_`~]/g, '').trim()
+  return normalizeStructuralText(unwrapLinks(s)).replace(/[*_`~]/g, '').trim()
 }
 
 /** Strip markdown emphasis/backticks and collapse whitespace. */
 function cleanTitle(s: string): string {
-  return unwrapLinks(s)
+  return normalizeStructuralText(unwrapLinks(s))
     .replace(/[*_`#]/g, '')
     .replace(/\s+/g, ' ')
     .trim()

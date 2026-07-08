@@ -93,6 +93,8 @@ interface BodyProps {
   neighbors: { newer?: string; older?: string }
 }
 
+const WRAPPER_SECTION_TITLES = new Set(['change log', 'deployment notes'])
+
 function ReleaseBody(props: BodyProps) {
   const { version, parsed, workItems, remoteUrl, typeFilter, setTypeFilter, query, setQuery, copied, setCopied, neighbors } = props
 
@@ -246,12 +248,12 @@ function ReleaseBody(props: BodyProps) {
         <div className="space-y-10">
           {sections.map((s) => (
             <section key={s.title}>
-              <h2 className="mb-4 flex items-center gap-3 text-lg font-bold text-charcoal">
-                {s.title}
-                <span className="rounded-full bg-charcoal/6 px-2 py-0.5 font-mono text-xs font-medium text-slate-brand">
-                  {s.items.length}
+              <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-charcoal/8 pb-3">
+                <h2 className="text-xl font-bold tracking-tight text-charcoal">{s.title}</h2>
+                <span className="rounded-full bg-magenta/10 px-3 py-1 font-mono text-xs font-semibold text-magenta-deep">
+                  {s.items.length} {s.items.length === 1 ? 'change' : 'changes'}
                 </span>
-              </h2>
+              </div>
               <div className="space-y-3">
                 {s.items.map((item, i) => (
                   <ItemCard key={item.id ?? `${s.title}-${i}`} item={item} workItem={item.id ? workItems.get(item.id) : undefined} />
@@ -266,7 +268,9 @@ function ReleaseBody(props: BodyProps) {
           <div className="mt-12 space-y-8">
             {parsed.sections.map((s, i) => (
               <section key={i} className="rounded-2xl border border-charcoal/8 bg-white p-6 shadow-card">
-                {s.title && <h2 className="mb-3 text-lg font-bold text-charcoal">{s.title}</h2>}
+                {s.title && !WRAPPER_SECTION_TITLES.has(s.title.trim().toLowerCase()) && (
+                  <h2 className="mb-3 text-lg font-bold text-charcoal">{s.title}</h2>
+                )}
                 <Markdown className="prose-brand text-charcoal/90">{s.markdown}</Markdown>
               </section>
             ))}
