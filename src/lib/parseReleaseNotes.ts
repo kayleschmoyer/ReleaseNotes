@@ -55,13 +55,6 @@ function normalizeStructuralText(s: string): string {
   return s
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\u00A0/g, ' ')
-    .replace(/\\(?=#)/g, '')
-}
-
-function normalizeMarkdownSource(markdown: string): string {
-  return normalizeStructuralText(markdown)
-    .replace(/\\r\\n|\\n|\\r/g, '\n')
-    .replace(/(^|\n)([ \t]*)\\+(?=#{1,6})/g, '$1$2')
 }
 
 function stripInline(s: string): string {
