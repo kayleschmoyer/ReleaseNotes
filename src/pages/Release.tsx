@@ -1,0 +1,285 @@
+import { useMemo, useState } from 'react'
+import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom'
+import { useData } from '../api/DataProvider'
+import { useAsync } from '../lib/useAsync'
+import { parseReleaseNotes } from '../lib/parseReleaseNotes'
+import { releaseToHtml, releaseToMarkdown, copyRich } from '../lib/exportRelease'
+import { typeMeta } from '../lib/status'
+import type { ItemType, ParsedRelease, ReleaseItem, WorkItemInfo } from '../lib/types'
+import { config } from '../lib/config'
+import { ItemCard } from '../components/ItemCard'
+import { Markdown } from '../components/Markdown'
+import { ReleaseSkeleton } from '../components/Skeletons'
+import { EmptyState, ErrorState } from '../components/States'
+import { CheckIcon, CopyIcon, ExternalIcon, PrintIcon, SearchIcon } from '../components/icons'
+import type { ShellContext } from './AppShell'
+
+type TypeFilter = 'all' | ItemType
+
+function matches(item: ReleaseItem, wi: WorkItemInfo | undefined, type: TypeFilter, q: string): boolean {
+  if (type !== 'all' && item.type !== type) return false
+  if (!q) return true
+  const hay = `${item.title} ${item.id ?? ''} ${wi?.state ?? ''} ${item.body}`.toLowerCase()
+  return hay.includes(q)
+}
+
+export function Release() {
+  const { version = '' } = useParams()
+  const { versions } = useOutletContext<ShellContext>()
+  const data = useData()
+
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [query, setQuery] = useState('')
+  const [copied, setCopied] = useState<'md' | 'html' | null>(null)
+
+  const page = versions.find((v) => v.name === version)
+
+  const releaseState = useAsync<{ parsed: ParsedRelease; workItems: Map<number, WorkItemInfo> } | null>(
+    async () => {
+      if (!page) return null
+      const md = await data.getReleaseMarkdown(page.path)
+      const parsed = parseReleaseNotes(md)
+      const ids = parsed.items.map((i) => i.id).filter((id): id is number => id !== undefined)
+      let workItems = new Map<number, WorkItemInfo>()
+      try {
+        workItems = await data.getWorkItems(ids)
+      } catch {
+        // Status enrichment is best-effort; notes still render without it.
+      }
+      return { parsed, workItems }
+    },
+    [data, page?.path],
+  )
+
+  // Wait for the version list before deciding the version doesn't exist.
+  if (!page && versions.length > 0) return <Navigate to="/" replace />
+  if (!page || releaseState.loading) return <ReleaseSkeleton />
+  if (releaseState.error) return <ErrorState error={releaseState.error} onRetry={releaseState.retry} />
+  if (!releaseState.data) return <ReleaseSkeleton />
+
+  const { parsed, workItems } = releaseState.data
+  return (
+    <ReleaseBody
+      key={version}
+      version={version}
+      parsed={parsed}
+      workItems={workItems}
+      remoteUrl={page.remoteUrl}
+      typeFilter={typeFilter}
+      setTypeFilter={setTypeFilter}
+      query={query}
+      setQuery={setQuery}
+      copied={copied}
+      setCopied={setCopied}
+      neighbors={{
+        newer: versions[versions.findIndex((v) => v.name === version) - 1]?.name,
+        older: versions[versions.findIndex((v) => v.name === version) + 1]?.name,
+      }}
+    />
+  )
+}
+
+interface BodyProps {
+  version: string
+  parsed: ParsedRelease
+  workItems: Map<number, WorkItemInfo>
+  remoteUrl?: string
+  typeFilter: TypeFilter
+  setTypeFilter: (t: TypeFilter) => void
+  query: string
+  setQuery: (q: string) => void
+  copied: 'md' | 'html' | null
+  setCopied: (c: 'md' | 'html' | null) => void
+  neighbors: { newer?: string; older?: string }
+}
+
+function ReleaseBody(props: BodyProps) {
+  const { version, parsed, workItems, remoteUrl, typeFilter, setTypeFilter, query, setQuery, copied, setCopied, neighbors } = props
+
+  const q = query.trim().toLowerCase()
+  const visible = useMemo(
+    () => parsed.items.filter((i) => matches(i, i.id ? workItems.get(i.id) : undefined, typeFilter, q)),
+    [parsed.items, workItems, typeFilter, q],
+  )
+
+  const featureCount = parsed.items.filter((i) => i.type === 'feature').length
+  const bugCount = parsed.items.filter((i) => i.type === 'bug').length
+  const presentTypes = [...new Set(parsed.items.map((i) => i.type))]
+
+  const sections: Array<{ title: string; items: ReleaseItem[] }> = [
+    { title: 'Main Changes', items: visible.filter((i) => i.section === 'main') },
+    { title: 'Minor Changes', items: visible.filter((i) => i.section === 'minor') },
+    { title: 'Other Changes', items: visible.filter((i) => i.section === 'other') },
+  ].filter((s) => s.items.length > 0)
+
+  const copy = async (kind: 'md' | 'html') => {
+    const md = releaseToMarkdown(version, parsed, workItems)
+    if (kind === 'md') await navigator.clipboard.writeText(md)
+    else await copyRich(releaseToHtml(version, parsed, workItems), md)
+    setCopied(kind)
+    setTimeout(() => setCopied(null), 1600)
+  }
+
+  const wikiUrl =
+    remoteUrl ??
+    `https://dev.azure.com/${config.org}/${encodeURIComponent(config.project)}/_wiki/wikis/${encodeURIComponent(config.wiki)}?pagePath=${encodeURIComponent(`${config.rootPath}/${version}`)}`
+
+  return (
+    <div className="rise-in" data-testid="release-page">
+      {/* Hero */}
+      <div className="living-magenta-soft border-b border-charcoal/6">
+        <div className="brand-grid mx-auto max-w-4xl px-6 pt-10 pb-8">
+          <p className="font-mono text-xs tracking-widest text-slate-brand uppercase">
+            Vast Online Core · Release
+          </p>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <h1 className="font-mono text-5xl font-semibold tracking-tight text-charcoal sm:text-6xl" data-testid="release-version">
+              {version}
+            </h1>
+            <div className="no-print flex items-center gap-2">
+              <button
+                onClick={() => copy('md')}
+                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
+                title="Copy as Markdown"
+              >
+                {copied === 'md' ? <CheckIcon className="h-4 w-4 text-forest" /> : <CopyIcon className="h-4 w-4" />}
+                {copied === 'md' ? 'Copied' : 'Markdown'}
+              </button>
+              <button
+                onClick={() => copy('html')}
+                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
+                title="Copy email-ready HTML"
+              >
+                {copied === 'html' ? <CheckIcon className="h-4 w-4 text-forest" /> : <CopyIcon className="h-4 w-4" />}
+                {copied === 'html' ? 'Copied' : 'Email'}
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
+                title="Print or save as PDF"
+              >
+                <PrintIcon className="h-4 w-4" />
+                PDF
+              </button>
+              <a
+                href={wikiUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-charcoal/15 bg-white px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-magenta hover:text-magenta-deep"
+                title="Open the source page in Azure DevOps"
+              >
+                <ExternalIcon className="h-4 w-4" />
+                Wiki
+              </a>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {featureCount > 0 && (
+              <span className="rounded-full bg-lilac/10 px-3 py-1 text-sm font-medium text-lilac">
+                {featureCount} new {featureCount === 1 ? 'feature' : 'features'}
+              </span>
+            )}
+            {bugCount > 0 && (
+              <span className="rounded-full bg-scarlet/10 px-3 py-1 text-sm font-medium text-scarlet">
+                {bugCount} {bugCount === 1 ? 'fix' : 'fixes'}
+              </span>
+            )}
+            {parsed.items.length === 0 && (
+              <span className="rounded-full bg-stone-brand/15 px-3 py-1 text-sm text-slate-brand">
+                No itemised changes on this page
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-4xl px-6 py-8">
+        {/* Filters */}
+        {parsed.items.length > 0 && (
+          <div className="no-print mb-8 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
+              {(['all', ...presentTypes] as TypeFilter[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  data-testid={`filter-${t}`}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                    typeFilter === t
+                      ? 'bg-charcoal text-white'
+                      : 'bg-white text-slate-brand ring-1 ring-charcoal/10 hover:text-charcoal'
+                  }`}
+                >
+                  {t === 'all' ? `All (${parsed.items.length})` : `${typeMeta(t).label}s`}
+                </button>
+              ))}
+            </div>
+            <div className="relative ml-auto w-full sm:w-60">
+              <SearchIcon className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-stone-brand" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search this release"
+                aria-label="Search within this release"
+                className="w-full rounded-full border border-charcoal/10 bg-white py-2 pr-4 pl-9 text-sm placeholder:text-stone-brand focus:border-magenta"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Items */}
+        {sections.length === 0 && parsed.items.length > 0 && (
+          <EmptyState title="Nothing matches those filters">
+            Clear the search or pick a different type to see the rest of this release.
+          </EmptyState>
+        )}
+        <div className="space-y-10">
+          {sections.map((s) => (
+            <section key={s.title}>
+              <h2 className="mb-4 flex items-center gap-3 text-lg font-bold text-charcoal">
+                {s.title}
+                <span className="rounded-full bg-charcoal/6 px-2 py-0.5 font-mono text-xs font-medium text-slate-brand">
+                  {s.items.length}
+                </span>
+              </h2>
+              <div className="space-y-3">
+                {s.items.map((item, i) => (
+                  <ItemCard key={item.id ?? `${s.title}-${i}`} item={item} workItem={item.id ? workItems.get(item.id) : undefined} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {/* Non-item sections (Deployment Notes, Change Log, ...) */}
+        {parsed.sections.length > 0 && (
+          <div className="mt-12 space-y-8">
+            {parsed.sections.map((s, i) => (
+              <section key={i} className="rounded-2xl border border-charcoal/8 bg-white p-6 shadow-card">
+                {s.title && <h2 className="mb-3 text-lg font-bold text-charcoal">{s.title}</h2>}
+                <Markdown className="prose-brand text-charcoal/90">{s.markdown}</Markdown>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {/* Prev / next */}
+        <div className="no-print mt-14 flex items-center justify-between border-t border-charcoal/8 pt-6 font-mono text-sm">
+          {neighbors.newer ? (
+            <Link to={`/release/${encodeURIComponent(neighbors.newer)}`} className="text-magenta-deep hover:underline">
+              ← {neighbors.newer}
+            </Link>
+          ) : (
+            <span />
+          )}
+          {neighbors.older ? (
+            <Link to={`/release/${encodeURIComponent(neighbors.older)}`} className="text-magenta-deep hover:underline">
+              {neighbors.older} →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

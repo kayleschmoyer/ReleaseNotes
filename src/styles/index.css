@@ -1,0 +1,165 @@
+@import 'tailwindcss';
+
+@theme {
+  /* ── Klipboard primary group brand colours ── */
+  --color-magenta: #ed017f;
+  --color-magenta-deep: #c40170;
+  --color-charcoal: #333333;
+  --color-biscuit: #f2f3ef;
+
+  /* ── Supporting brand colours ── */
+  --color-blush: #efd8f2;
+  --color-sky: #bdcbf5;
+  --color-oatmeal: #eeead6;
+  --color-slate-brand: #5a6675;
+  --color-mist: #7a9ab7;
+  --color-stone-brand: #919da6;
+
+  /* ── Sector accents (Automotive = Forest) ── */
+  --color-forest: #23a370;
+  --color-scarlet: #cd0212;
+  --color-lilac: #785ef0;
+  --color-orange-sector: #ff7700;
+  --color-ocean: #0766ff;
+
+  --font-sans: 'Inter Variable', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --shadow-card: 0 1px 2px rgb(51 51 51 / 0.04), 0 4px 16px rgb(51 51 51 / 0.06);
+  --shadow-card-hover: 0 2px 4px rgb(51 51 51 / 0.06), 0 8px 28px rgb(51 51 51 / 0.1);
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--color-charcoal);
+  background: var(--color-biscuit);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Living Magenta — the brand gradient, croppable per the guidelines */
+.living-magenta {
+  background:
+    radial-gradient(120% 140% at 15% 20%, #ed017f 0%, #ed017f 28%, #c40170 55%, rgb(196 1 112 / 0.55) 75%, rgb(242 243 239 / 0) 100%),
+    linear-gradient(150deg, #ed017f 0%, #c40170 60%, #f2f3ef 100%);
+}
+
+.living-magenta-soft {
+  background: linear-gradient(165deg, rgb(237 1 127 / 0.14) 0%, rgb(196 1 112 / 0.05) 45%, rgb(242 243 239 / 0) 75%);
+}
+
+/* Graph-paper grid texture used across the brand system */
+.brand-grid {
+  background-image:
+    linear-gradient(rgb(51 51 51 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(51 51 51 / 0.055) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.brand-grid-light {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.13) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* Focus ring in brand magenta */
+:focus-visible {
+  outline: 2px solid var(--color-magenta);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(237 1 127 / 0.18);
+}
+
+/* Thin brand scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(51 51 51 / 0.22) transparent;
+}
+
+/* Markdown content (fallback rendering for unstructured wiki sections) */
+.prose-brand {
+  line-height: 1.7;
+  font-size: 0.9375rem;
+}
+.prose-brand h1,
+.prose-brand h2,
+.prose-brand h3,
+.prose-brand h4 {
+  font-weight: 700;
+  color: var(--color-charcoal);
+  margin: 1.5em 0 0.5em;
+  line-height: 1.25;
+}
+.prose-brand h1 { font-size: 1.35rem; }
+.prose-brand h2 { font-size: 1.2rem; }
+.prose-brand h3 { font-size: 1.05rem; }
+.prose-brand p { margin: 0.6em 0; }
+.prose-brand ul, .prose-brand ol { margin: 0.6em 0; padding-left: 1.4em; }
+.prose-brand ul { list-style: disc; }
+.prose-brand ol { list-style: decimal; }
+.prose-brand li { margin: 0.25em 0; }
+.prose-brand a { color: var(--color-magenta-deep); text-decoration: underline; text-underline-offset: 2px; }
+.prose-brand code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: rgb(51 51 51 / 0.06);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+.prose-brand pre {
+  background: var(--color-charcoal);
+  color: #f2f3ef;
+  border-radius: 10px;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.prose-brand pre code { background: none; padding: 0; color: inherit; }
+.prose-brand table { border-collapse: collapse; margin: 0.8em 0; width: 100%; font-size: 0.9em; }
+.prose-brand th, .prose-brand td {
+  border: 1px solid rgb(51 51 51 / 0.12);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.prose-brand th { background: rgb(51 51 51 / 0.04); font-weight: 600; }
+.prose-brand blockquote {
+  border-left: 3px solid var(--color-magenta);
+  padding-left: 1em;
+  color: var(--color-slate-brand);
+  margin: 0.8em 0;
+}
+.prose-brand hr { border: none; border-top: 1px solid rgb(51 51 51 / 0.12); margin: 1.5em 0; }
+.prose-brand img { max-width: 100%; border-radius: 8px; }
+
+/* ── Print styles: branded PDF export via the browser's print dialog ── */
+@media print {
+  @page { margin: 16mm 14mm; }
+  body { background: white !important; }
+  .no-print { display: none !important; }
+  .print-block { display: block !important; }
+  .print-full {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgb(51 51 51 / 0.05) 25%, rgb(51 51 51 / 0.1) 37%, rgb(51 51 51 / 0.05) 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 0.35s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
