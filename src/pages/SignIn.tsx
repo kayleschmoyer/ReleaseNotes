@@ -1,12 +1,35 @@
+import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
-import { isDemoMode } from '../lib/config'
+import { useMode } from '../lib/mode'
 import { Logo, Marque } from '../components/Logo'
 import { MicrosoftIcon } from '../components/icons'
 
 export function SignIn() {
-  const { user, signIn } = useAuth()
+  const { user, signIn, needsAccessCode } = useAuth()
+  const mode = useMode()
+  const [name, setName] = useState(() => localStorage.getItem('display-name') ?? '')
+  const [accessCode, setAccessCode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
   if (user) return <Navigate to="/" replace />
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+    try {
+      await signIn({ accessCode, name: name.trim() })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inputCls =
+    'w-full rounded-xl border border-charcoal/15 bg-white px-4 py-3 text-[15px] text-charcoal placeholder:text-stone-brand focus:border-magenta'
 
   return (
     <div className="flex min-h-screen bg-biscuit">
@@ -28,20 +51,59 @@ export function SignIn() {
             straight from the source, always up to date.
           </p>
 
-          <button
-            onClick={signIn}
-            data-testid="signin-button"
-            className="mt-9 inline-flex items-center gap-3 rounded-xl bg-charcoal px-6 py-3.5 text-[15px] font-semibold text-white shadow-card transition-all hover:bg-black hover:shadow-card-hover"
-          >
-            <MicrosoftIcon className="h-5 w-5" />
-            Sign in with Microsoft
-          </button>
+          {mode === 'server' ? (
+            <form onSubmit={submit} className="mt-9 max-w-sm space-y-3">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name (optional)"
+                aria-label="Your name"
+                autoComplete="name"
+                className={inputCls}
+              />
+              {needsAccessCode && (
+                <input
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  placeholder="Access code"
+                  aria-label="Access code"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  data-testid="access-code"
+                  className={inputCls}
+                />
+              )}
+              {error && (
+                <p className="text-sm text-scarlet" role="alert" data-testid="signin-error">
+                  {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                data-testid="signin-button"
+                className="w-full rounded-xl bg-magenta px-6 py-3.5 text-[15px] font-semibold text-white shadow-card transition-all hover:bg-magenta-deep hover:shadow-card-hover disabled:opacity-60"
+              >
+                {busy ? 'Signing in…' : 'View release notes'}
+              </button>
+            </form>
+          ) : (
+            <button
+              onClick={() => void signIn()}
+              data-testid="signin-button"
+              className="mt-9 inline-flex items-center gap-3 rounded-xl bg-charcoal px-6 py-3.5 text-[15px] font-semibold text-white shadow-card transition-all hover:bg-black hover:shadow-card-hover"
+            >
+              <MicrosoftIcon className="h-5 w-5" />
+              Sign in with Microsoft
+            </button>
+          )}
 
-          {isDemoMode && (
+          {mode === 'demo' && (
             <p className="mt-4 max-w-sm text-xs leading-relaxed text-stone-brand">
-              Demo mode — no Entra app registration configured, so you'll browse bundled sample
-              data. Set <code className="font-mono">VITE_ENTRA_CLIENT_ID</code> to connect to Azure
-              DevOps.
+              Demo mode — nothing configured yet, so you'll browse bundled sample data. Start the
+              bundled server with an <code className="font-mono">ADO_PAT</code> to see live wiki
+              content.
             </p>
           )}
         </div>

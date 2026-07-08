@@ -9,8 +9,5 @@ export const config = {
   rootPath: (env.VITE_ADO_ROOT_PATH as string | undefined) || '/Vast Online Core',
 }
 
-/** No Entra app registration configured — run against bundled sample data. */
-export const isDemoMode = !config.clientId
-
 export const workItemUrl = (id: number) =>
   `https://dev.azure.com/${config.org}/${config.project}/_workitems/edit/${id}`

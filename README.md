@@ -1,14 +1,14 @@
 # Vast Online · Release Notes
 
-A modern, enterprise release-notes portal for **Vast Online Core**. Users sign in with
-Microsoft, pick a version, and see what shipped — features, fixes, statuses and deployment
-notes — pulled live from the Azure DevOps wiki. Styled to the Klipboard brand guidelines
-with the Autowork One identity.
+A modern, enterprise release-notes portal for **Vast Online Core**. Users log in, pick a
+version, and see what shipped — features, fixes, statuses and deployment notes — pulled
+live from the Azure DevOps wiki. Styled to the Klipboard brand guidelines with the
+Autowork One identity.
 
 ## What it does
 
-- **Microsoft sign-in** (Entra ID / MSAL). The app calls Azure DevOps with the *signed-in
-  user's own token*, so wiki permissions apply per user and there are no secrets to host.
+- **Simple sign-in** — users enter an access code you choose (no Azure setup needed).
+  Optional Microsoft Entra sign-in is also supported if your admin ever registers the app.
 - **Version browser** — every release page under the wiki root, grouped by series (7.x, 6.x),
   newest first, filterable.
 - **Beautiful release notes** — Main Changes / Minor Changes as cards with work-item links and
@@ -18,61 +18,62 @@ with the Autowork One identity.
 - **Filter** by type or text within a release.
 - **Compare** — pick two versions and get the full rollup of everything shipped in between.
 - **Share** — copy as Markdown or email-ready HTML, or print to a branded PDF.
-- **Demo mode** — with no Entra app configured, the app runs on bundled sample data so you can
+- **Demo mode** — with nothing configured, the app runs on bundled sample data so you can
   preview the UI instantly.
 
-## Quick start (demo mode)
+## Get it running (no Azure admin needed)
+
+The bundled Node server reads the wiki with a **Personal Access Token** — something any
+Azure DevOps user can create for themselves — and gates the app behind an access code.
+The token stays on the server; users never see it.
+
+### 1. Create a PAT (2 minutes)
+
+1. Go to `dev.azure.com/mamsoftglobal` → click your avatar (top right) → **…** →
+   **User settings** → **Personal access tokens** → **New Token**
+2. Name: `Release Notes`, Expiration: up to a year
+3. Scopes: **Work Items (Read)** and **Code (Read)** — or *Full access* if unsure
+4. Copy the token — you only see it once
+
+### 2. Configure and run
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 — sample data, no sign-in needed
+cp .env.example .env     # set ADO_PAT=<your token> and APP_ACCESS_CODE=<pick one>
+npm run build
+npm start                # → http://localhost:3001
 ```
 
-## Connecting to Azure DevOps (production)
+That's it. Share the URL and the access code with your team. It runs anywhere Node 18+
+runs — your own machine, an internal VM, IIS behind a reverse proxy, a container, etc.
+(A server restart signs everyone out; they just re-enter the code.)
 
-### 1. Register the Entra app (one-time, Azure admin)
+Leave `APP_ACCESS_CODE` empty to skip the login gate entirely (e.g. on a trusted internal
+network).
 
-1. **Azure Portal → Microsoft Entra ID → App registrations → New registration**
-   - Name: `Vast Release Notes`
-   - Supported account types: *Accounts in this organizational directory only*
-   - Platform: **Single-page application (SPA)** with redirect URIs
-     `http://localhost:5173` and your production URL
-2. **API permissions → Add a permission → Azure DevOps → Delegated →
-   `user_impersonation`**, then **Grant admin consent**
-3. Copy the **Application (client) ID** and **Directory (tenant) ID**
+> **Wiki path note:** if the wiki root page path differs, adjust `ADO_ROOT_PATH` in `.env`
+> — it must match the page path exactly, e.g. `/Vast-Online-Core` or `/Vast Online Core`.
 
-### 2. Configure
+### Local development
 
 ```bash
-cp .env.example .env
-# set VITE_ENTRA_CLIENT_ID and VITE_ENTRA_TENANT_ID
+npm run dev:server       # terminal 1 — API on :3001 (reads .env)
+npm run dev              # terminal 2 — UI on :5173, proxies /api to :3001
 ```
 
-The wiki source is also configurable there (`VITE_ADO_ORG`, `VITE_ADO_PROJECT`,
-`VITE_ADO_WIKI`, `VITE_ADO_ROOT_PATH`) — defaults point at
-`mamsoftglobal / vast-online / vast-online.wiki / "Vast Online Core"`.
+With no server running, `npm run dev` falls back to **demo mode** (bundled sample data).
 
-> If the root page path differs (check the `path` shown by the wiki API), adjust
-> `VITE_ADO_ROOT_PATH`. It must match the wiki page path exactly, e.g. `/Vast-Online-Core`
-> or `/Vast Online Core`.
+## Optional: Microsoft Entra sign-in
 
-### 3. Build & deploy
-
-```bash
-npm run build      # static output in dist/
-```
-
-Deploy `dist/` to any static host (Azure Static Web Apps, App Service, IIS, nginx).
-Configure SPA fallback so unknown routes serve `index.html`, and add the production URL
-to the app registration's redirect URIs.
-
-Users need **read access to the Azure DevOps wiki** to see notes — the app surfaces a
-friendly "ask for access" screen otherwise.
+If an Azure admin later registers the app (Entra ID → App registrations → SPA platform →
+API permission *Azure DevOps / user_impersonation*), set `VITE_ENTRA_CLIENT_ID` and
+`VITE_ENTRA_TENANT_ID` in `.env` and rebuild. The app then becomes a pure static site:
+users sign in with their own Microsoft accounts, DevOps permissions apply per user, and
+no server or PAT is needed. Deploy `dist/` to any static host with SPA fallback.
 
 ## Development
 
 ```bash
-npm run dev        # dev server
 npm test           # unit tests (parser, version sort)
 npm run lint       # eslint
 npm run build      # typecheck + production build
@@ -81,10 +82,11 @@ npm run build      # typecheck + production build
 ### Project layout
 
 ```
+server/         Node/Express server: access-code login + PAT proxy + static hosting
 src/
-├─ auth/        MSAL config + AuthProvider (demo/live)
+├─ auth/        AuthProvider (demo / server / Entra) + MSAL config
 ├─ api/         Azure DevOps REST client + cached DataProvider
-├─ lib/         parser, version sort, export, fixtures, config
+├─ lib/         parser, version sort, export, fixtures, mode detection, config
 ├─ components/  Logo, ItemCard, StatusPill, sidebar, search, icons…
 ├─ pages/       SignIn, AppShell, Release, Compare
 └─ styles/      Tailwind theme with the brand design tokens

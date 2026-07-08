@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { InteractionRequiredAuthError } from '@azure/msal-browser'
 import { useIsAuthenticated, useMsal } from '@azure/msal-react'
-import { isDemoMode } from '../lib/config'
+import { useMode } from '../lib/mode'
 import { ADO_SCOPES } from './msal'
 
 export interface AuthUser {
@@ -10,12 +10,22 @@ export interface AuthUser {
   email: string
 }
 
+export interface SignInOptions {
+  /** Access code, used in server mode. */
+  accessCode?: string
+  /** Display name to remember, used in server mode. */
+  name?: string
+}
+
 export interface AuthContextValue {
   /** null = not signed in */
   user: AuthUser | null
-  signIn: () => void
+  /** Whether the sign-in form needs an access code (server mode only). */
+  needsAccessCode: boolean
+  /** Throws with a friendly message when sign-in fails. */
+  signIn: (opts?: SignInOptions) => void | Promise<void>
   signOut: () => void
-  /** Access token for the Azure DevOps REST API. */
+  /** Access token for the Azure DevOps REST API (entra mode). */
   getToken: () => Promise<string>
 }
 
@@ -33,6 +43,7 @@ function DemoAuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user: signedIn ? { name: 'Demo User', email: 'demo@example.com' } : null,
+      needsAccessCode: false,
       signIn: () => {
         sessionStorage.setItem('demo-signed-in', '1')
         setSignedIn(true)
@@ -48,6 +59,59 @@ function DemoAuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+interface ServerMe {
+  authRequired: boolean
+  authenticated: boolean
+}
+
+function ServerAuthProvider({ children }: { children: ReactNode }) {
+  const [me, setMe] = useState<ServerMe | null>(null)
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem('display-name') ?? '')
+
+  useEffect(() => {
+    fetch('/api/me', { headers: { Accept: 'application/json' } })
+      .then((r) => r.json())
+      .then((data: ServerMe) => setMe(data))
+      .catch(() => setMe({ authRequired: true, authenticated: false }))
+  }, [])
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user:
+        me?.authenticated === true
+          ? { name: displayName || 'Vast Online user', email: 'signed in with access code' }
+          : null,
+      needsAccessCode: me?.authRequired ?? true,
+      signIn: async ({ accessCode = '', name = '' }: SignInOptions = {}) => {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessCode }),
+        })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(body.error ?? 'Sign-in failed. Try again.')
+        }
+        if (name) {
+          localStorage.setItem('display-name', name)
+          setDisplayName(name)
+        }
+        setMe((m) => ({ authRequired: m?.authRequired ?? true, authenticated: true }))
+      },
+      signOut: () => {
+        void fetch('/api/logout', { method: 'POST' })
+        setMe((m) => ({ authRequired: m?.authRequired ?? true, authenticated: false }))
+      },
+      getToken: async () => '',
+    }),
+    [me, displayName],
+  )
+
+  // Hold rendering until we know whether the user has a session.
+  if (me === null) return null
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
 function MsalAuthProvider({ children }: { children: ReactNode }) {
   const { instance, accounts } = useMsal()
   const isAuthenticated = useIsAuthenticated()
@@ -59,6 +123,7 @@ function MsalAuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated && account
           ? { name: account.name ?? account.username, email: account.username }
           : null,
+      needsAccessCode: false,
       signIn: () => {
         void instance.loginRedirect({ scopes: ADO_SCOPES })
       },
@@ -84,9 +149,8 @@ function MsalAuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  return isDemoMode ? (
-    <DemoAuthProvider>{children}</DemoAuthProvider>
-  ) : (
-    <MsalAuthProvider>{children}</MsalAuthProvider>
-  )
+  const mode = useMode()
+  if (mode === 'entra') return <MsalAuthProvider>{children}</MsalAuthProvider>
+  if (mode === 'server') return <ServerAuthProvider>{children}</ServerAuthProvider>
+  return <DemoAuthProvider>{children}</DemoAuthProvider>
 }
