@@ -12,7 +12,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // React gets its own chunk so the msal/markdown chunks depend on it
+        // instead of on the app chunk — a cycle there leaves libraries with a
+        // null React reference at runtime (white-screen crash).
         manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
           msal: ['@azure/msal-browser', '@azure/msal-react'],
           markdown: ['react-markdown', 'remark-gfm'],
         },

@@ -14,9 +14,10 @@ export type AppMode = 'demo' | 'server' | 'entra'
 export const ModeContext = createContext<AppMode>('demo')
 export const useMode = () => useContext(ModeContext)
 
-/** Decide the mode once at boot. */
-export async function detectMode(): Promise<AppMode> {
-  if (config.clientId) return 'entra'
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Server if the bundled backend answers, demo otherwise. */
+export async function detectServerOrDemo(): Promise<AppMode> {
   try {
     const res = await fetch('/api/me', { headers: { Accept: 'application/json' } })
     if (res.ok) {
@@ -27,4 +28,17 @@ export async function detectMode(): Promise<AppMode> {
     // No backend answering — fall through to demo.
   }
   return 'demo'
+}
+
+/** Decide the mode once at boot. */
+export async function detectMode(): Promise<AppMode> {
+  const clientId = config.clientId.trim()
+  if (clientId) {
+    if (GUID.test(clientId)) return 'entra'
+    console.warn(
+      `VITE_ENTRA_CLIENT_ID is set ("${clientId}") but is not a valid application (client) ID — ignoring it. ` +
+        'Leave it empty unless you have an Entra app registration.',
+    )
+  }
+  return detectServerOrDemo()
 }
