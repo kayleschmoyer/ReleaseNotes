@@ -28,7 +28,8 @@ export function ItemCard({ item, workItem }: ItemCardProps) {
   const [open, setOpen] = useState(false)
   // Live work item data wins over what was parsed from the page.
   const type = workItem?.type && workItem.type !== 'other' ? workItem.type : item.type
-  const title = item.title || workItem?.title || ''
+  const isPlaceholderTitle = !item.title || item.title.startsWith('Work item ')
+  const title = isPlaceholderTitle && workItem?.title ? workItem.title : item.title
   const meta = typeMeta(type)
   const hasBody = item.body.length > 0
 

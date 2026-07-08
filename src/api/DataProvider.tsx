@@ -39,11 +39,16 @@ function createDemoSource(): DataSource {
   }
 }
 
+/** Fired when the server rejects our session so the UI returns to sign-in. */
+export const UNAUTHORIZED_EVENT = 'app:unauthorized'
+
 /** Talks to the bundled Node server, which proxies Azure DevOps with its PAT. */
 function createServerSource(): DataSource {
   const get = async <T,>(url: string): Promise<T> => {
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
     if (!res.ok) {
+      // Session expired (e.g. the server restarted) — go back to sign-in.
+      if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
       const body = (await res.json().catch(() => ({}))) as { error?: string }
       throw new AdoError(res.status, body.error ?? `Request failed (${res.status})`)
     }
