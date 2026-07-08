@@ -51,13 +51,26 @@ function unwrapLinks(s: string): string {
  * Strip inline formatting so structural matching sees the plain text:
  * "**#297226**" -> "#297226", "[**##Heading**](url)" -> "##Heading".
  */
+function normalizeStructuralText(s: string): string {
+  return s
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\\(?=#)/g, '')
+}
+
+function normalizeMarkdownSource(markdown: string): string {
+  return normalizeStructuralText(markdown)
+    .replace(/\\r\\n|\\n|\\r/g, '\n')
+    .replace(/(^|\n)([ \t]*)\\+(?=#{1,6})/g, '$1$2')
+}
+
 function stripInline(s: string): string {
-  return unwrapLinks(s).replace(/[*_`~]/g, '').trim()
+  return normalizeStructuralText(unwrapLinks(s)).replace(/[*_`~]/g, '').trim()
 }
 
 /** Strip markdown emphasis/backticks and collapse whitespace. */
 function cleanTitle(s: string): string {
-  return unwrapLinks(s)
+  return normalizeStructuralText(unwrapLinks(s))
     .replace(/[*_`#]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -115,7 +128,7 @@ export function parseReleaseNotes(markdown: string): ParsedRelease {
     sectionBuf = []
   }
 
-  for (const line of markdown.split(/\r?\n/)) {
+  for (const line of normalizeMarkdownSource(markdown).split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
     if (inFence) {
       if (currentItem) currentItem.body += line + '\n'

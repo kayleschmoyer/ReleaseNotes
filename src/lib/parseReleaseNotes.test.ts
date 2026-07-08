@@ -113,6 +113,16 @@ describe('parseReleaseNotes', () => {
     expect(sections).toHaveLength(0)
   })
 
+  it('recognises headings and bare mentions with invisible wiki characters', () => {
+    const md = ['#﻿Deployment Notes', '##​Main Changes', '#297226', '##‌Minor Changes', '#296356'].join('\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+    ])
+    expect(sections).toHaveLength(0)
+  })
+
   it('dedupes items listed both in a TOC bullet and as a heading', () => {
     const md = [
       '- [Bug 291670: HQ Maintained](url)',
@@ -221,6 +231,27 @@ describe('parseReleaseNotes', () => {
     // Title-less mentions get placeholders; the UI swaps in the live work-item title.
     expect(items[0]).toMatchObject({ id: 297226, title: 'Work item 297226', section: 'main' })
     expect(items[1].section).toBe('minor')
+    expect(sections).toHaveLength(0)
+  })
+
+  it('parses wiki content that arrives with escaped newlines and escaped heading markers', () => {
+    const escapedHash = '\\#'
+    const md = [
+      '#Change Log',
+      '#Deployment Notes',
+      '##Main Changes',
+      '',
+      `**${escapedHash}297226**`,
+      '',
+      '##Minor Changes',
+      '',
+      `**${escapedHash}296356**`,
+    ].join('\\n')
+    const { items, sections } = parseReleaseNotes(md)
+    expect(items.map((i) => ({ id: i.id, section: i.section }))).toEqual([
+      { id: 297226, section: 'main' },
+      { id: 296356, section: 'minor' },
+    ])
     expect(sections).toHaveLength(0)
   })
 
