@@ -22,9 +22,10 @@ function TypeIcon({ type, className }: { type: ReleaseItem['type']; className?: 
 interface ItemCardProps {
   item: ReleaseItem
   workItem?: WorkItemInfo
+  markdownBaseUrl?: string
 }
 
-export function ItemCard({ item, workItem }: ItemCardProps) {
+export function ItemCard({ item, workItem, markdownBaseUrl }: ItemCardProps) {
   const [open, setOpen] = useState(false)
   // Live work item data wins over what was parsed from the page.
   const type = workItem?.type && workItem.type !== 'other' ? workItem.type : item.type
@@ -67,13 +68,15 @@ export function ItemCard({ item, workItem }: ItemCardProps) {
         </div>
         {hasBody && (
           <ChevronIcon
-            className={`mt-1 h-4 w-4 shrink-0 text-stone-brand transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`item-card-chevron mt-1 h-4 w-4 shrink-0 text-stone-brand transition-transform ${open ? 'rotate-90' : ''}`}
           />
         )}
       </div>
-      {hasBody && open && (
-        <div className="border-t border-charcoal/6 px-4 pt-3 pb-4 sm:px-5">
-          <Markdown className="prose-brand text-slate-brand">{item.body}</Markdown>
+      {hasBody && (
+        <div className={`item-card-body border-t border-charcoal/6 px-4 pt-3 pb-4 sm:px-5 ${open ? '' : 'item-card-body-collapsed'}`}>
+          <Markdown className="prose-brand text-slate-brand" baseUrl={markdownBaseUrl}>
+            {item.body}
+          </Markdown>
         </div>
       )}
     </article>
