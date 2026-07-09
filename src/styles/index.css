@@ -251,10 +251,14 @@ html {
     border-color: #ffd0d4;
   }
 
-  .pdf-release [data-testid='item-card'],
   .pdf-section-card {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .pdf-release [data-testid='item-card'] {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   .pdf-item-sections section {
@@ -263,8 +267,8 @@ html {
   }
 
   .pdf-item-sections section > div:first-child {
-    break-after: avoid;
-    page-break-after: avoid;
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .pdf-item-sections {

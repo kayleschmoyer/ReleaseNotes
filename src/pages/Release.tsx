@@ -3,6 +3,7 @@ import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom'
 import { useData } from '../api/DataProvider'
 import { useAsync } from '../lib/useAsync'
 import { parseReleaseNotes } from '../lib/parseReleaseNotes'
+import { config } from '../lib/config'
 import { typeMeta } from '../lib/status'
 import type { ItemType, ParsedRelease, ReleaseItem, WorkItemInfo } from '../lib/types'
 import { ItemCard } from '../components/ItemCard'
@@ -62,6 +63,7 @@ export function Release() {
       version={version}
       parsed={parsed}
       workItems={workItems}
+      remoteUrl={page.remoteUrl}
       typeFilter={typeFilter}
       setTypeFilter={setTypeFilter}
       query={query}
@@ -78,6 +80,7 @@ interface BodyProps {
   version: string
   parsed: ParsedRelease
   workItems: Map<number, WorkItemInfo>
+  remoteUrl?: string
   typeFilter: TypeFilter
   setTypeFilter: (t: TypeFilter) => void
   query: string
@@ -88,7 +91,7 @@ interface BodyProps {
 const WRAPPER_SECTION_TITLES = new Set(['change log', 'deployment notes'])
 
 function ReleaseBody(props: BodyProps) {
-  const { version, parsed, workItems, typeFilter, setTypeFilter, query, setQuery, neighbors } = props
+  const { version, parsed, workItems, remoteUrl, typeFilter, setTypeFilter, query, setQuery, neighbors } = props
   const generatedOn = useMemo(
     () =>
       new Intl.DateTimeFormat('en-NZ', {
@@ -124,6 +127,10 @@ function ReleaseBody(props: BodyProps) {
     { title: 'Minor Changes', items: visible.filter((i) => i.section === 'minor') },
     { title: 'Other Changes', items: visible.filter((i) => i.section === 'other') },
   ].filter((s) => s.items.length > 0)
+
+  const markdownBaseUrl =
+    remoteUrl ??
+    `https://dev.azure.com/${config.org}/${encodeURIComponent(config.project)}/_wiki/wikis/${encodeURIComponent(config.wiki)}/`
 
   return (
     <div className="rise-in pdf-release" data-testid="release-page">
@@ -233,7 +240,12 @@ function ReleaseBody(props: BodyProps) {
               </div>
               <div className="space-y-3">
                 {s.items.map((item, i) => (
-                  <ItemCard key={item.id ?? `${s.title}-${i}`} item={item} workItem={item.id ? workItems.get(item.id) : undefined} />
+                  <ItemCard
+                    key={item.id ?? `${s.title}-${i}`}
+                    item={item}
+                    workItem={item.id ? workItems.get(item.id) : undefined}
+                    markdownBaseUrl={markdownBaseUrl}
+                  />
                 ))}
               </div>
             </section>
@@ -248,7 +260,9 @@ function ReleaseBody(props: BodyProps) {
                 {s.title && !WRAPPER_SECTION_TITLES.has(s.title.trim().toLowerCase()) && (
                   <h2 className="mb-3 text-lg font-bold text-charcoal">{s.title}</h2>
                 )}
-                <Markdown className="prose-brand text-charcoal/90">{s.markdown}</Markdown>
+                <Markdown className="prose-brand text-charcoal/90" baseUrl={markdownBaseUrl}>
+                  {s.markdown}
+                </Markdown>
               </section>
             ))}
           </div>

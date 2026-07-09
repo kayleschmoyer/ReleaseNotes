@@ -177,6 +177,81 @@ app.get('/api/workitems', requireAuth, async (req, res) => {
   res.json({ value })
 })
 
+app.get('/api/wiki-asset', requireAuth, async (req, res) => {
+  const src = String(req.query.src || '').trim()
+  if (!src) return res.status(400).json({ error: 'Missing src' })
+
+  let target
+  try {
+    if (/^https?:\/\//i.test(src)) target = new URL(src)
+    else if (src.startsWith('/')) target = new URL(src, `${ADO_BASE}/`)
+    else return res.status(400).json({ error: 'Invalid src' })
+  } catch {
+    return res.status(400).json({ error: 'Invalid src' })
+  }
+
+  const adoHost = new URL(ADO_BASE).host
+  if (target.host !== adoHost) {
+    return res.status(400).json({ error: 'Only Azure DevOps assets are allowed' })
+  }
+
+  try {
+    const authHeaders = {
+      Authorization: 'Basic ' + Buffer.from(':' + PAT).toString('base64'),
+      Accept: '*/*',
+    }
+
+    // Short wiki attachment paths (/.attachments/...) need to be fetched via
+    // the wiki repository Items API endpoint.
+    let fetchUrl = target.toString()
+    const attachmentPathIndex = target.pathname.indexOf('/.attachments/')
+    if (attachmentPathIndex >= 0) {
+      const attachmentPath = target.pathname.slice(attachmentPathIndex)
+      const wikiInfoRes = await fetch(
+        `${wikiApi}/wiki/wikis/${encodeURIComponent(WIKI)}?api-version=${API_VERSION}`,
+        { headers: authHeaders },
+      )
+      if (!wikiInfoRes.ok) {
+        return res.status(wikiInfoRes.status).json({ error: `Could not resolve wiki repository (${wikiInfoRes.status})` })
+      }
+
+      const wikiInfo = await wikiInfoRes.json()
+      const repoId = wikiInfo.repositoryId || wikiInfo.repository?.id
+      if (!repoId) return res.status(502).json({ error: 'Wiki repository id not found' })
+
+      const params = new URLSearchParams({
+        path: attachmentPath,
+        download: 'false',
+        resolveLfs: 'true',
+        '$format': 'octetStream',
+        'api-version': API_VERSION,
+        sanitize: 'true',
+      })
+      params.set('versionDescriptor.version', 'wikiMaster')
+
+      fetchUrl = `${wikiApi}/git/repositories/${encodeURIComponent(repoId)}/items?${params.toString()}`
+    }
+
+    const upstream = await fetch(fetchUrl, {
+      headers: {
+        ...authHeaders,
+      },
+    })
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Asset request failed (${upstream.status})` })
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+    const bytes = Buffer.from(await upstream.arrayBuffer())
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    return res.send(bytes)
+  } catch {
+    return res.status(502).json({ error: 'Could not load wiki asset.' })
+  }
+})
+
 // ── Static SPA ──────────────────────────────────────────────────────────────
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 app.use(express.static(dist))
